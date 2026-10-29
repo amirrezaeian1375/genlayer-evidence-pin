@@ -1,100 +1,44 @@
-# EvidencePin
+# Deployment Record — GenLayer Studionet
 
-A reusable GenLayer Intelligent Contract primitive for **quote-grounded, point-in-time evidence** with verifiable freshness.
+Contract: EvidencePin
+Deployed: 2026-10-29
+Execution mode: Normal (full consensus), 5 initial validators per transaction
 
-Web-judging contracts rot. A leader reads a page at block N, a verdict is stored, and
-months later the page has changed and nobody can tell. EvidencePin stores the smallest
-durable unit of evidence — a **verbatim quote** plus the **closed-set answer** it supports —
-and later answers one honest question: *is this evidence still there, and if not, what does
-the source say now?*
+## Address
 
-## What it does
+Contract: 0x7973456F5022183BfB9B3156432cE423b8e465c7
+Deployer: 0x3d9E39265d74511065f88C987f898c1d02892f3e
 
-| Method | Type | Purpose |
-|---|---|---|
-| `pin(url, question, options)` | write | Fetch the source once, extract a label plus a verbatim quote, store it |
-| `recheck(pin_id)` | write | Deterministic containment check; consensus only if the quote is gone |
-| `close(pin_id)` | write | Owner stops further checks on a pin |
-| `get_pin(pin_id)` | view | Full pin record |
-| `is_active(pin_id)` | view | True iff status is ACTIVE |
-| `count()` | view | Number of pins created |
+## Verified transactions
 
-The caller supplies 2–5 allowed answers, so nothing is stored as free text that two nodes
-could read differently.
+All transactions below reached FINALIZED with consensus result Accepted and rotation count 0.
+Nothing here was produced by direct-mode tests; every result came from live web and LLM
+execution on Studionet validators.
 
-## How consensus is used
+| Step | Method | Tx | Result |
+|---|---|---|---|
+| Deploy | constructor | [0x166dc402](https://explorer-studio.genlayer.com/tx/0x166dc402b2411765d8cee0ae1157fb8f3b40398a938694a3699c27cc5e2160ff) | contract created |
+| P1 pin | `pin` | [0xa67a0362](https://explorer-studio.genlayer.com/tx/0xa67a0362119d25197fe039a601b89cd960c541bcc58135ee588964271266eb2f) | `"P1"`, answer `21 million` |
+| P1 recheck | `recheck` | [0x30fd850f](https://explorer-studio.genlayer.com/tx/0x30fd850f0f4800db378249fc1dcc5d3ca5dfcf03201b2c72170107889cf7352f) | `ACTIVE` / `PRESENT` |
+| P2 pin | `pin` | [0xe0c3d470](https://explorer-studio.genlayer.com/tx/0xe0c3d470e39188c85a9e7c5b8db628830fde1f390960b1805925362d58c1eda5) | `"P2"`, answer `proof of stake` |
+| P3 pin | `pin` | [0x5b3fcada](https://explorer-studio.genlayer.com/tx/0x5b3fcadadcdd9aaf2a5e46516a5c13e2f4ee0a275d26d6c47c24bf8e179a7987) | `"P3"`, answer `99.9 percent` |
+| P3 recheck after source edit | `recheck` | [0xd3370a63](https://explorer-studio.genlayer.com/tx/0xd3370a63a90f5ed5d9e92ee7ba1803bfdd9202bf78e8bea670e1918e9cf491f7) | `ACTIVE` / `CHANGED` -> version 2, answer `99.5 percent` |
+| P3 recheck after source retired | `recheck` | [0xfb642656](https://explorer-studio.genlayer.com/tx/0xfb6426561e03a0e0a0d53581b65e4f2ed24cb51fce75897b345c21361da75707) | `NOT_FOUND`, answer and quote empty |
 
-**`pin`** — a custom leader/validator pair (`gl.vm.run_nondet_unsafe`):
+## What each run proves
 
-- *Leader*: fetch the page, ask the model for one allowed label plus a verbatim quote.
-  If the quote is not literally present in its own copy, it raises `QUOTE_NOT_GROUNDED`
-  instead of storing a paraphrase.
-- *Validator*: fetches its **own** copy of the page, requires the leader's quote to appear
-  in it verbatim, then runs its own extraction and requires the same label. A validator
-  never trusts `leader_result.calldata` alone.
+- The quote is re-derived from the validator's own copy of the page, not copied from the
+  leader's calldata: P3's stored quote stopped matching the live page and the deterministic
+  step reported `CHANGED` before any model was called.
+- The deterministic path needs no LLM: the `PRESENT` recheck passed with strict equality only.
+- A changed source produces a new pinned version (v1 -> v2) instead of silently keeping stale
+  evidence.
+- A retired source produces `NOT_FOUND`. The contract does not claim the old value was false.
 
-**`recheck`** — two stages, deliberately:
+## Not yet proven
 
-1. `gl.eq_principle.strict_eq` over a pure string function: is the stored quote still in
-   the page? No model call, no tolerance, fully deterministic.
-2. Only when the quote is gone: a second consensus block looks for a new grounded answer.
-   If none exists, the pin becomes `NOT_FOUND` — never "false".
-
-## Status model
-
-| Status | Reason | Meaning |
-|---|---|---|
-| `ACTIVE` | `PINNED` / `PRESENT` / `CHANGED` | Evidence is grounded; `version` bumps on `CHANGED` |
-| `ACTIVE` | `FETCH_FAILED` | Source unreachable; status deliberately unchanged |
-| `NOT_FOUND` | `NOT_FOUND` | No grounded answer now; this is **not** a claim the fact is false |
-| `CLOSED` | `CLOSED` | Owner closed the pin; `recheck` reverts |
-
-## Design rules
-
-- **Deterministic first.** The cheap, exact check runs before any model, and its result is
-  consensus-checked by strict equality.
-- **Grounding over agreement.** A quote must exist in the *validator's* copy of the page.
-  Two models agreeing on a quote they both invented is still rejected.
-- **Closed answers.** Extraction maps onto the caller's labels via an explicit whitelist;
-  anything else is `UNKNOWN`.
-- **Bounded everything.** URL <= 400 chars, question 8-240, quote 24-400, page 120-60000
-  chars, <= 5000 pins, <= 50 rechecks per pin, one bounded repair attempt.
-- **Untrusted input.** Page text is passed inside `<page>` tags with an explicit
-  instruction that it is data, not instructions.
-
-## Limitations
-
-- Local tests are **direct mode with mocked web and LLM responses**. Real network
-  behavior on Studionet is not yet proven by these tests.
-- Quote containment is not semantic. A page that reflows its text mid-transaction can
-  legitimately fail the deterministic step; that is treated as `UNSTABLE_SOURCE`, not
-  silently accepted.
-- `NOT_FOUND` is about grounding, not truth. A fact can be true and still not be
-  quotable from the current page.
-- No funds, no staking, no slashing: this is an evidence primitive, not a settlement layer.
-- Pages behind a login wall, heavy JS, or bot filters will simply fail to ground.
-
-## Usage
-
-    pin_id = contract.pin(
-        "https://status.vendor.example/sla",
-        "What monthly uptime does the vendor publish?",
-        ["99.9", "99.5", "99.0"],
-    )
-    contract.recheck(pin_id)          # -> "ACTIVE" | "NOT_FOUND"
-    contract.get_pin(pin_id)          # -> full record incl. quote and version
-
-## Running the tests
-
-    pip install -r requirements.txt
-    python -m pytest tests/direct -q
-    genvm-lint check contracts/evidence_pin.py
-
-Covered: paraphrase rejection, label disagreement, leader label outside the allowed set,
-deterministic recheck without any LLM mock, version bump on change, `NOT_FOUND`, recovery,
-fetch failure, owner-only close.
-
-## Scope
-
-Standalone Intelligent Contract primitive, no frontend, no product flow. Anyone building a
-contract that has to cite the web can embed this instead of writing its own evidence logic.
+- Behavior on Bradbury or any network other than Studionet.
+- Sources that reflow text between the leader and validator fetches inside one transaction
+  (`UNSTABLE_SOURCE`). This path is implemented but was not observed on chain.
+- Pages behind login walls, heavy JavaScript rendering, or bot filtering.
+- The `FETCH_FAILED` branch was not exercised on chain.
