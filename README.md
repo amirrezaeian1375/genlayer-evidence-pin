@@ -19,7 +19,7 @@ the source say now?*
 | `is_active(pin_id)` | view | True iff status is ACTIVE |
 | `count()` | view | Number of pins created |
 
-Caller supplies 2–5 allowed answers, so nothing is stored as free text that two nodes
+The caller supplies 2–5 allowed answers, so nothing is stored as free text that two nodes
 could read differently.
 
 ## How consensus is used
@@ -46,7 +46,7 @@ could read differently.
 |---|---|---|
 | `ACTIVE` | `PINNED` / `PRESENT` / `CHANGED` | Evidence is grounded; `version` bumps on `CHANGED` |
 | `ACTIVE` | `FETCH_FAILED` | Source unreachable; status deliberately unchanged |
-| `NOT_FOUND` | `NOT_FOUND` | No grounded answer now; this is **not** a claim that the fact is false |
+| `NOT_FOUND` | `NOT_FOUND` | No grounded answer now; this is **not** a claim the fact is false |
 | `CLOSED` | `CLOSED` | Owner closed the pin; `recheck` reverts |
 
 ## Design rules
@@ -57,8 +57,8 @@ could read differently.
   Two models agreeing on a quote they both invented is still rejected.
 - **Closed answers.** Extraction maps onto the caller's labels via an explicit whitelist;
   anything else is `UNKNOWN`.
-- **Bounded everything.** URL ≤ 400 chars, question 8–240, quote 24–400, page 120–60 000
-  chars, ≤ 5 000 pins, ≤ 50 rechecks per pin, one bounded repair attempt.
+- **Bounded everything.** URL <= 400 chars, question 8-240, quote 24-400, page 120-60000
+  chars, <= 5000 pins, <= 50 rechecks per pin, one bounded repair attempt.
 - **Untrusted input.** Page text is passed inside `<page>` tags with an explicit
   instruction that it is data, not instructions.
 
@@ -76,11 +76,25 @@ could read differently.
 
 ## Usage
 
-```python
-pin_id = contract.pin(
-    "https://status.vendor.example/sla",
-    "What monthly uptime does the vendor publish?",
-    ["99.9", "99.5", "99.0"],
-)
-contract.recheck(pin_id)          # -> "ACTIVE" | "NOT_FOUND"
-contract.get_pin(pin_id)          # -> full record incl. quote and version
+    pin_id = contract.pin(
+        "https://status.vendor.example/sla",
+        "What monthly uptime does the vendor publish?",
+        ["99.9", "99.5", "99.0"],
+    )
+    contract.recheck(pin_id)          # -> "ACTIVE" | "NOT_FOUND"
+    contract.get_pin(pin_id)          # -> full record incl. quote and version
+
+## Running the tests
+
+    pip install -r requirements.txt
+    python -m pytest tests/direct -q
+    genvm-lint check contracts/evidence_pin.py
+
+Covered: paraphrase rejection, label disagreement, leader label outside the allowed set,
+deterministic recheck without any LLM mock, version bump on change, `NOT_FOUND`, recovery,
+fetch failure, owner-only close.
+
+## Scope
+
+Standalone Intelligent Contract primitive, no frontend, no product flow. Anyone building a
+contract that has to cite the web can embed this instead of writing its own evidence logic.
