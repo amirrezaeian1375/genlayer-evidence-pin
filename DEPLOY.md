@@ -1,4 +1,4 @@
-# Deployment Record — GenLayer Studionet
+# Deployment Record - GenLayer Studionet
 
 Contract: EvidencePin
 Deployed: 2026-10-29
