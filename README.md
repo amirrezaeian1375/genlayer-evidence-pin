@@ -4,11 +4,11 @@ A reusable GenLayer Intelligent Contract primitive for **quote-grounded, point-i
 
 Web-judging contracts rot. A leader reads a page at block N, a verdict is stored, and
 months later the page has changed and nobody can tell. EvidencePin stores the smallest
-durable unit of evidence — a **verbatim quote** plus the **closed-set answer** it supports —
-and later answers one honest question: *is this evidence still there, and if not, what does
+durable unit of evidence: a **verbatim quote** plus the **closed-set answer** it supports.
+Later it answers one honest question: *is this evidence still there, and if not, what does
 the source say now?*
 
-Deployed and verified on GenLayer Studionet: see [DEPLOY.md](DEPLOY.md) for the contract
+Deployed and verified on GenLayer Studionet. See [DEPLOY.md](DEPLOY.md) for the contract
 address and every finalized transaction.
 
 ## What it does
@@ -22,12 +22,12 @@ address and every finalized transaction.
 | `is_active(pin_id)` | view | True iff status is ACTIVE |
 | `count()` | view | Number of pins created |
 
-The caller supplies 2–5 allowed answers, so nothing is stored as free text that two nodes
-could read differently.
+The caller supplies 2 to 5 allowed answers, so nothing is stored as free text that two
+nodes could read differently.
 
 ## How consensus is used
 
-**`pin`** — a custom leader/validator pair (`gl.vm.run_nondet_unsafe`):
+**`pin`** uses a custom leader/validator pair (`gl.vm.run_nondet_unsafe`):
 
 - *Leader*: fetch the page, ask the model for one allowed label plus a verbatim quote.
   If the quote is not literally present in its own copy, it raises `QUOTE_NOT_GROUNDED`
@@ -36,12 +36,12 @@ could read differently.
   in it verbatim, then runs its own extraction and requires the same label. A validator
   never trusts `leader_result.calldata` alone.
 
-**`recheck`** — two stages, deliberately:
+**`recheck`** runs in two stages, deliberately:
 
 1. `gl.eq_principle.strict_eq` over a pure string function: is the stored quote still in
    the page? No model call, no tolerance, fully deterministic.
 2. Only when the quote is gone: a second consensus block looks for a new grounded answer.
-   If none exists, the pin becomes `NOT_FOUND` — never "false".
+   If none exists, the pin becomes `NOT_FOUND`, never "false".
 
 ## Status model
 
@@ -60,8 +60,8 @@ could read differently.
   Two models agreeing on a quote they both invented is still rejected.
 - **Closed answers.** Extraction maps onto the caller's labels via an explicit whitelist;
   anything else is `UNKNOWN`.
-- **Bounded everything.** URL <= 400 chars, question 8-240, quote 24-400, page 120-60000
-  chars, <= 5000 pins, <= 50 rechecks per pin, one bounded repair attempt.
+- **Bounded everything.** URL up to 400 chars, question 8 to 240, quote 24 to 400, page 120
+  to 60000 chars, up to 5000 pins, up to 50 rechecks per pin, one bounded repair attempt.
 - **Untrusted input.** Page text is passed inside `<page>` tags with an explicit
   instruction that it is data, not instructions.
 
